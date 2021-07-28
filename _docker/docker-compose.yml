@@ -1,0 +1,77 @@
+version: '3.5'
+
+services:
+  database:
+    image: mariadb:10.2
+    environment:
+      MYSQL_ROOT_PASSWORD: SERV_PASS
+      MYSQL_DATABASE: edify_database
+      MYSQL_USER: SERV_EDIFY
+      MYSQL_PASSWORD: SERV_EDIFY_PASS
+    restart: always
+    volumes:
+      - ../_docker/database:/var/lib/mysql
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    ports:
+      - 81:80
+    environment:
+      - PMA_ARBITRARY=1
+      - PMA_HOST=database
+      - PMA_USER=SERV_EDIFY
+      - PMA_PASSWORD=SERV_EDIFY_PASS
+      - UPLOAD_LIMIT=300M
+    depends_on:
+      - database
+    restart: always
+
+  back-end:
+    image: node:14-alpine
+    container_name: 'back-end'
+    command: >
+      sh -c "
+        echo '--------- SET TIMEZONE'
+        ln -snf /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime && echo 'America/Sao_Paulo' > /etc/timezone
+
+        echo '--------- INSTALL NODE MODULES'
+        npm install --verbose
+        
+        echo '--------- RUN MIGRATIONS'
+        node ace migration:run
+
+        echo '--------- RUN SEED'
+        node ace db:seed
+
+        echo '--------- START API SERVER FOR DEVELOPMENT'
+        npm run development
+        "
+    working_dir: /app
+    ports:
+      - 3000:3000
+    volumes:
+      - ../back-end:/app
+    depends_on:
+      - database
+
+  front-end:
+    image: node:14-alpine
+    container_name: 'front-end'
+    command: >
+      sh -c "
+        echo '--------- SET TIMEZONE'
+        ln -snf /usr/share/zoneinfo/America/Sao_Paulo /etc/localtime && echo 'America/Sao_Paulo' > /etc/timezone
+
+        echo '--------- INSTALL NODE MODULES'
+        npm install --verbose
+
+        echo '--------- START UI SERVER FOR DEVELOPMENT'
+        npm run development
+        "
+    working_dir: /app
+    ports:
+      - 80:8000
+    volumes:
+      - ../front-end:/app/
+    depends_on:
+      - back-end
